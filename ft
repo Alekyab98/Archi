@@ -1,0 +1,115 @@
+WITH smf_data AS (
+  SELECT DISTINCT
+    a.fqdn,
+    b.site_name,
+    b.region,
+    b.longitude,
+    b.latitude,
+    b.timezone,
+    b.site_clli,
+    b.pair,
+    b.area,
+    b.market,
+    CASE 
+      WHEN fqdn LIKE '%ec-p%' OR fqdn LIKE '%consp%' OR fqdn LIKE '%entrp%' THEN fqdn
+    END AS primary_fqdn,
+    CASE 
+      WHEN fqdn LIKE '%ec-s%' OR fqdn LIKE '%conss%' OR fqdn LIKE '%entrs%' THEN fqdn
+    END AS secondary_fqdn
+  FROM `vz-it-pr-gudv-dtwndo-0.aid_dtwin_core_uat_tbls.aether_smf_performance` a
+  LEFT JOIN `vz-it-pr-gudv-dtwndo-0.aid_dtwin_core_uat_tbls.static_aether_site_configuration` b
+    ON LOWER(SUBSTR(a.fqdn, 1, 8)) = LOWER(COALESCE(b.site_clli, b.pair))
+  WHERE a.trans_dt = SAFE_CAST(timestamp(current_timestamp) AS DATE)  and b.trans_dt=(select max(trans_dt) from `vz-it-pr-gudv-dtwndo-0.aid_dtwin_core_uat_tbls.static_aether_site_configuration` where trans_dt<=SAFE_CAST(timestamp(current_timestamp) AS DATE) )
+),
+smf_final_data AS (
+  -- Map primary FQDNs to their corresponding secondary FQDNs
+  SELECT DISTINCT
+    d1.site_name,
+    d1.region,
+    d1.longitude,
+    d1.latitude,
+    d1.timezone,
+    d1.primary_fqdn,
+    d2.secondary_fqdn,
+    d1.area,
+    d1.market
+  FROM smf_data d1
+  LEFT JOIN smf_data d2
+    ON LOWER(SUBSTR(d2.secondary_fqdn, 1, 8)) = LOWER(d1.pair)
+       AND SUBSTR(d2.secondary_fqdn, -9, 3) = SUBSTR(d1.primary_fqdn, -9, 3)
+       AND SUBSTR(d2.secondary_fqdn, -3, 3) = SUBSTR(d1.primary_fqdn, -3, 3)
+  WHERE d1.primary_fqdn IS NOT NULL
+),
+
+upf_data AS (
+  SELECT DISTINCT
+    a.fqdn,
+    b.site_name,
+    b.region,
+    b.longitude,
+    b.latitude,
+    b.timezone,
+    b.site_clli,
+    b.pair,
+    b.area,
+    b.market,
+    CASE 
+      WHEN fqdn LIKE '%EC-P%' OR fqdn LIKE '%CONSP%' OR fqdn LIKE '%ENTRP%'or fqdn LIKE'%ENTPP%' THEN fqdn
+    END AS primary_fqdn,
+    CASE 
+      WHEN fqdn LIKE '%EC-S%' OR fqdn LIKE '%CONSS%' OR fqdn LIKE '%ENTRS%'or fqdn LIKE '%ENTPS%' THEN fqdn
+    END AS secondary_fqdn
+  FROM `vz-it-pr-gudv-dtwndo-0.aid_dtwin_core_uat_tbls.aether_upf_performance` a
+  LEFT JOIN `vz-it-pr-gudv-dtwndo-0.aid_dtwin_core_uat_tbls.static_aether_site_configuration` b
+    ON LOWER(SUBSTR(a.fqdn, 1, 8)) = LOWER(COALESCE(b.site_clli, b.pair))
+  WHERE a.trans_dt = SAFE_CAST(timestamp(current_timestamp) AS DATE)   and b.trans_dt=(select max(trans_dt) from `vz-it-pr-gudv-dtwndo-0.aid_dtwin_core_uat_tbls.static_aether_site_configuration` where trans_dt<=SAFE_CAST(timestamp(current_timestamp) AS DATE) )
+),
+upf_final_data AS (
+  -- Map primary FQDNs to their corresponding secondary FQDNs
+  SELECT DISTINCT
+    d1.site_name,
+    d1.region,
+    d1.longitude,
+    d1.latitude,
+    d1.timezone,
+    d1.primary_fqdn,
+    d2.secondary_fqdn,
+    d1.area,
+    d1.market
+  FROM upf_data d1
+  LEFT JOIN upf_data d2
+    ON LOWER(SUBSTR(d2.secondary_fqdn, 1, 8)) = LOWER(d1.pair)
+       AND SUBSTR(d2.secondary_fqdn, -9, 3) = SUBSTR(d1.primary_fqdn, -9, 3)
+       AND SUBSTR(d2.secondary_fqdn, -3, 3) = SUBSTR(d1.primary_fqdn, -3, 3)
+  WHERE d1.primary_fqdn IS NOT NULL
+)
+SELECT 
+  primary_fqdn,
+  secondary_fqdn,
+  site_name,
+  region,
+  longitude,
+  latitude,
+  timezone,
+  'smf' as function_name,
+  SAFE_CAST(timestamp(current_timestamp) AS DATE)  AS trans_dt,
+  area,
+  market,
+  CURRENT_TIMESTAMP() AS updated_timestamp 
+  FROM smf_final_data 
+UNION ALL 
+SELECT 
+  primary_fqdn,
+  secondary_fqdn,
+  site_name,
+  region,
+  longitude,
+  latitude,
+  timezone,
+  'upf' as function_name,
+  SAFE_CAST(timestamp(current_timestamp) AS DATE)  AS trans_dt,
+  area,
+  market,
+  CURRENT_TIMESTAMP() AS updated_timestamp 
+  FROM upf_final_data;
+
